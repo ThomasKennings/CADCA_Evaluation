@@ -1,4 +1,4 @@
-classdef ConsistencyCheck < matlab.mixin.Copyable
+classdef ConsistencyCheck %< matlab.mixin.Copyable
         
     
     properties
@@ -17,6 +17,10 @@ classdef ConsistencyCheck < matlab.mixin.Copyable
     end
     
     methods 
+        
+        function obj_out = copy(obj)
+           obj_out = ConsistencyCheck();
+        end
                 
         function [eqSys, eqVal, maxVehicle] = performConsistencyCheck(obj, currentStateTable, oldStateTable, interval)
                      

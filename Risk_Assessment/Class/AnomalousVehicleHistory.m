@@ -1,8 +1,9 @@
-classdef AnomalousVehicleHistory < matlab.mixin.Copyable
+classdef AnomalousVehicleHistory %< matlab.mixin.Copyable
     %ANOMALOUSVEHICLEHISTORY Summary of this class goes here
     %   Detailed explanation goes here
     
     properties
+        maxVehicleCount;
         history; % Row: vehicles, Col: timestep; 1: anomalous, 0: normal
         entryCount = 0;
     end
@@ -16,8 +17,15 @@ classdef AnomalousVehicleHistory < matlab.mixin.Copyable
     
     methods
         
-        function obj = AnomalousVehicleHistory(maxVehicleCount)            
+        function obj = AnomalousVehicleHistory(maxVehicleCount)    
+            obj.maxVehicleCount = maxVehicleCount;
             obj.history = true(maxVehicleCount, obj.DEFAULT_HISTORY_ENTRY_COUNT);            
+        end
+        
+        function obj_out = copy(obj)
+            obj_out = AnomalousVehicleHistory(obj.maxVehicleCount);
+            obj_out.history = obj.history;
+            obj_out.entryCount = obj.entryCount;
         end
         
         function [] = updateTable(obj, anomalousFlagArr)

@@ -1,6 +1,8 @@
-classdef RiskAssessment < matlab.mixin.Copyable
+classdef RiskAssessment %< matlab.mixin.Copyable
         
     properties
+        
+        scenario;
         
         vehicleDims; % Col-1: width, Col-2: Length; Row Index = vehicle ID - 1
         
@@ -34,8 +36,15 @@ classdef RiskAssessment < matlab.mixin.Copyable
     methods
         
         function obj = RiskAssessment(scenario)
+            obj.scenario = scenario;
             obj.vehicleDims = obj.getVehicleDims(scenario.Actors);
             obj.vehicleHistory = AnomalousVehicleHistory(max([SimulationVehicleData.MAX_VEHICLE_COUNT, length(scenario.Actors)]));
+        end
+        
+        function obj_out = copy(obj)
+            obj_out = RiskAssessment(obj.scenario);
+            obj_out.vehicleDims = obj.vehicleDims;
+            obj_out.vehicleHistory = obj.vehicleHistory;
         end
         
         function [controlIndex, mostLikelyScenario] = riskResultAggregation(obj, isSafeArr, ttcArr, anomalousFlagArr)
@@ -439,7 +448,8 @@ classdef RiskAssessment < matlab.mixin.Copyable
             
             for vIndex = 1 : length(actors)
                 actorTemp = actors(vIndex);
-                vDims(actorTemp.ActorID,:) = [actorTemp.Length, actorTemp.Width];
+                %vDims(actorTemp.ActorID,:) = [actorTemp.Length, actorTemp.Width];
+                vDims(actorTemp.ActorID,:) = [size(actorTemp, 1), size(actorTemp, 2)];
             end
             
         end
