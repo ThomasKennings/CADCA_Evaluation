@@ -721,6 +721,9 @@ classdef AnomalyEquationSolver
                 return;
             end
             
+            eqSys = cell(numOtherVehicle+1, 1);
+            eqSys{1} = AnomalyEquationSolver.DEFAULT_EQ_SYS_EGO_BLOCK{:,1};
+
             for vIndex = 1 : numOtherVehicle                
                 for eqIndex = 1 : otherEqCount                    
                     tempEq = AnomalyEquationSolver.DEFAULT_EQ_SYS_OTHER_BLOCK{eqIndex};                    
@@ -729,11 +732,15 @@ classdef AnomalyEquationSolver
                             tempEq{eleIndex}(1) = vIndex + AnomalyEquationSolver.ID_EGO;
                         end
                     end
-                    otherEqSys{(vIndex-1) * otherEqCount + eqIndex,1} = tempEq;                    
-                end                
+                    eqSys{vIndex+1,eqIndex} = tempEq;
+                    % otherEqSys{(vIndex-1) * otherEqCount + eqIndex,1} = tempEq;                    
+                end
+                % eqSys{vIndex+1} = otherEqSys{(vIndex-1) * otherEqCount+1:(vIndex-1) * otherEqCount+otherEqCount,1};
             end
             
-            eqSys = [ AnomalyEquationSolver.DEFAULT_EQ_SYS_EGO_BLOCK(:,1); otherEqSys(:,1)];
+            
+
+            % eqSys = [ AnomalyEquationSolver.DEFAULT_EQ_SYS_EGO_BLOCK{:,1}; otherEqSys{:,1}];
             
         end
         

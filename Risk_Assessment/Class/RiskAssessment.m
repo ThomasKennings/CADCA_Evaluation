@@ -1,8 +1,6 @@
-classdef RiskAssessment %< matlab.mixin.Copyable
+classdef RiskAssessment
         
     properties
-        
-        scenario;
         
         vehicleDims; % Col-1: width, Col-2: Length; Row Index = vehicle ID - 1
         
@@ -35,16 +33,20 @@ classdef RiskAssessment %< matlab.mixin.Copyable
     
     methods
         
-        function obj = RiskAssessment(scenario)
-            obj.scenario = scenario;
-            obj.vehicleDims = obj.getVehicleDims(scenario.Actors);
-            obj.vehicleHistory = AnomalousVehicleHistory(max([SimulationVehicleData.MAX_VEHICLE_COUNT, length(scenario.Actors)]));
+        function obj = RiskAssessment(actors)
+            obj.vehicleDims = obj.getVehicleDims(actors);
+            obj.vehicleHistory = AnomalousVehicleHistory(max([SimulationVehicleData.MAX_VEHICLE_COUNT, length(actors)]));
         end
         
-        function obj_out = copy(obj)
-            obj_out = RiskAssessment(obj.scenario);
-            obj_out.vehicleDims = obj.vehicleDims;
-            obj_out.vehicleHistory = obj.vehicleHistory;
+        function lambda = rtcl_wrapToPi(obj, lambda)
+            q = (lambda < -pi) | (pi < lambda);
+            lambda(q) = obj.rtcl_wrapTo2Pi(lambda(q) + pi) - pi;
+        end
+        
+        function lambda = rtcl_wrapTo2Pi(obj, lambda)
+            positiveInput = (lambda > 0);
+            lambda = mod(lambda, 2*pi);
+            lambda((lambda == 0) & positiveInput) = 2*pi;
         end
         
         function [controlIndex, mostLikelyScenario] = riskResultAggregation(obj, isSafeArr, ttcArr, anomalousFlagArr)
@@ -74,44 +76,16 @@ classdef RiskAssessment %< matlab.mixin.Copyable
                                
             mostLikelyScenario = obj.getMostLikelyScenario(anomalousFlagArr);
             
-            if isempty(controlIndex)
-%                 anomalousWeightArr = obj.vehicleHistory.getLatestWArr();
-%                 
-%                 %%%% Compute inner product for each solution to identify
-%                 %%%% the most possible scenario.
-%                 
-%                 %%%%%% First, normalize the vector
-%                 
-%                 normalizedFlagArr = anomalousFlagArr;
-%                 for aIndex = 1 : size(anomalousFlagArr,2)
-%                     if sum(normalizedFlagArr(:,aIndex) == 1) > 0
-%                         normalizedFlagArr(:,aIndex) = normalizedFlagArr(:,aIndex) / norm(double(normalizedFlagArr(:,aIndex)));
-%                     end
-%                 end
-%                 
-%                 %%%%%% Second, compute the inner product
-%                 
-%                 tempArr = repmat(anomalousWeightArr(1:size(normalizedFlagArr,1),:), [1, size(anomalousFlagArr,2)]) .* normalizedFlagArr;
-%                 innerProductArr = sum(tempArr);
-%                 [~, mostLikelyScenario] = max(innerProductArr(2:end));
-%                 mostLikelyScenario = mostLikelyScenario + 1;
-                
+            if isempty(controlIndex)                
                 %%%% Find the safe control according to the most possible
                 %%%% scenario.
                 controlIndex = find(isSafeArr(:,mostLikelyScenario),1);
                 
                 %%%%%% If no safe option choose the one with largest TTC
-                
                 if isempty(controlIndex)
-                    
                     [~, controlIndex] = max(ttcArr(:,mostLikelyScenario));
                     
-                end
-                
-%                 if controlIndex == 2
-%                     controlIndex
-%                 end
-                
+                end                
             end
             
         end
@@ -178,10 +152,6 @@ classdef RiskAssessment %< matlab.mixin.Copyable
                 end                
             end
             
-%             if ~isempty(find(ttcArr == 4.5))
-%                 ttcArr
-%             end
-            
         end
         
         function [ttcArr, isSafeArr] = getGroundTruthTTCEstimation(obj, controlInput, conciseTable)
@@ -200,7 +170,7 @@ classdef RiskAssessment %< matlab.mixin.Copyable
             
             %%%% Update state table with the desired control input and
             %%%% perform risk assessment
-            
+             
             stateTableWithControlCell = cell(controlCount,timeCount);
             ttcArr = nan(controlCount,timeCount);
             for cIndex = 1 : controlCount
@@ -243,15 +213,7 @@ classdef RiskAssessment %< matlab.mixin.Copyable
                 tempTargetRadius = norm(obj.vehicleDims(vIDTemp-1,:)) / 4;
                 distThreshold = (tempTargetRadius + egoRadius) * obj.distThresholdMarginFactor;
                 
-%                 if vIDTemp == 6
-%                     close all                
-%                 end
-                
-                [ttcArr(vIDTemp), tu, egoPosArr, otherPosArr] = obj.computeTTCAndTu(stateTable(1,:), stateRowTemp, distThreshold);
-                
-%                 if vIDTemp == 6 && stateTable(1,1) <= 0.4 && stateTable(1,1) >= 0.3
-%                     vIDTemp                
-%                 end
+                [ttcArr(vIDTemp), tu, egoPosArr, otherPosArr] = obj.computeTTCAndTu(stateTable(1,:), stateRowTemp, egoRadius, tempTargetRadius);
                 
                 if isnan(ttcArr(vIDTemp))
                     continue;
@@ -263,7 +225,7 @@ classdef RiskAssessment %< matlab.mixin.Copyable
                 
                 %%%% Travelling Parallely
                 tempVehicleHeading = deg2rad(stateRowTemp(1, SimulationVehicleData.TABLE_INDEX_H));
-                headingDiff = abs(wrapToPi(tempVehicleHeading - egoHeading));
+                headingDiff = abs(obj.rtcl_wrapToPi(tempVehicleHeading - egoHeading));
                 
                 if headingDiff > pi/2                    
                     headingDiff = pi - headingDiff;                    
@@ -299,28 +261,7 @@ classdef RiskAssessment %< matlab.mixin.Copyable
     
     methods (Static)
         
-        function anomalousFlagArr = getAnomalousFlagArr(solutionCell)                        
-            
-            solutionCount = length(solutionCell);
-            
-            anomalousFlagArr = false(SimulationVehicleData.MAX_VEHICLE_COUNT,solutionCount);
-            
-            for sIndex = 1 : solutionCount
-                
-                if ~isnan(solutionCell{sIndex})                
-                    for vIndex = 1 : (length(solutionCell{1}) / AnomalyEquationSolver.INDEX_ALL_TYPES)
-                        anomalousFlagArr(vIndex, sIndex)...
-                            = (sum(solutionCell{sIndex}((vIndex-1) * AnomalyEquationSolver.INDEX_ALL_TYPES+1:vIndex * AnomalyEquationSolver.INDEX_ALL_TYPES)) ~= AnomalyEquationSolver.INDEX_ALL_TYPES);                    
-                    end
-                end
-                
-            end
-            
-            anomalousFlagArr = anomalousFlagArr(1:vIndex,:);
-            
-        end
-        
-        function [ttc, tu, egoPosArr, otherPosArr] = computeTTCAndTu(egoState, otherState, distThreshold)
+        function [ttc, tu, egoPosArr, otherPosArr] = computeTTCAndTu(egoState, otherState, egoRadius, otherRadius)
                                     
             tu = RiskAssessment.computeMinAvoidTime(egoState, otherState);
             
@@ -350,17 +291,30 @@ classdef RiskAssessment %< matlab.mixin.Copyable
             otherAcc1D = norm(otherAcc) * sign(dot(otherAcc, otherheadingVec));
             
             egoPosArr = zeros(totalPredictionCount+1,2);
+            egoVelArr = zeros(totalPredictionCount+1,1);
+            egoHeadingArr = zeros(totalPredictionCount+1,1);
             egoPosArr(1,:) = egoPos;
+            egoVelArr(1,:) = egoVel1D;
+            egoHeadingArr(1,:) = egoHeadingRad;
             
             otherPosArr = zeros(totalPredictionCount+1,2);
+            otherVelArr = zeros(totalPredictionCount+1,1);
+            otherHeadingArr = zeros(totalPredictionCount+1,1);
             otherPosArr(1,:) = otherPos;
+            otherVelArr(1,:) = otherVel1D;
+            otherHeadingArr(1,:) = otherHeadingRad;
             
             %%%% Perform position prediction
 
-            egoPosArr(2:end,:) = RiskAssessment.predictLoc(egoPos, egoVel1D, egoAcc1D, egoHeadingRad, egoYawRateRad, RiskAssessment.PREDICTION_TIME_STEP, totalPredictionCount);
-            otherPosArr(2:end,:) = RiskAssessment.predictLoc(otherPos, otherVel1D, otherAcc1D, otherHeadingRad, otherYawRateRad, RiskAssessment.PREDICTION_TIME_STEP, totalPredictionCount);
-                        
+            % egoPosArr(2:end,:) = RiskAssessment.predictLoc(egoPos, egoVel1D, egoAcc1D, egoHeadingRad, egoYawRateRad, RiskAssessment.PREDICTION_TIME_STEP, totalPredictionCount);
+            % otherPosArr(2:end,:) = RiskAssessment.predictLoc(otherPos, otherVel1D, otherAcc1D, otherHeadingRad, otherYawRateRad, RiskAssessment.PREDICTION_TIME_STEP, totalPredictionCount);
+
+            %%%% Perform position, velocity and heading angle prediction
+            [egoPosArr(2:end,:), egoVelArr(2:end,:), egoHeadingArr(2:end,:)] = RiskAssessment.predictStatus(egoPos, egoVel1D, egoAcc1D, egoHeadingRad, egoYawRateRad, RiskAssessment.PREDICTION_TIME_STEP, totalPredictionCount);
+            [otherPosArr(2:end,:), otherVelArr(2:end,:), otherHeadingArr(2:end,:)] = RiskAssessment.predictStatus(otherPos, otherVel1D, otherAcc1D, otherHeadingRad, otherYawRateRad, RiskAssessment.PREDICTION_TIME_STEP, totalPredictionCount);
+            
             %%%% Check if collisions can happen
+            distThreshold = otherRadius + egoRadius;
             
             diffArr = egoPosArr - otherPosArr;
             distArr = (diffArr(:,1) .^ 2 + diffArr(:,2) .^ 2) .^ 0.5;
@@ -370,7 +324,11 @@ classdef RiskAssessment %< matlab.mixin.Copyable
                 collisionIndex = 1;
             end
             
-            ttc = collisionIndex * RiskAssessment.PREDICTION_TIME_STEP;
+            
+            collisionSeverity = (otherRadius / (egoRadius + otherRadius)) * sqrt((egoVelArr(collisionIndex, :)) .^ 2 + (otherVelArr(collisionIndex, :)) .^ 2 - 2 * egoVelArr(collisionIndex, :) .* otherVelArr(collisionIndex, :) .* cos(egoHeadingArr(collisionIndex, :) - otherHeadingArr(collisionIndex, :)));
+            % fprintf('Collision severity: %f\n', collisionSeverity);
+
+            ttc = collisionIndex * RiskAssessment.PREDICTION_TIME_STEP / collisionSeverity;
             
             if isempty(ttc)
                 ttc = nan; % if the two vehicles will not collide set to nan
@@ -411,6 +369,27 @@ classdef RiskAssessment %< matlab.mixin.Copyable
             
         end
         
+        function anomalousFlagArr = getAnomalousFlagArr(solutionCell)                        
+            
+            solutionCount = length(solutionCell);
+            
+            anomalousFlagArr = false(SimulationVehicleData.MAX_VEHICLE_COUNT,solutionCount);
+            
+            for sIndex = 1 : solutionCount
+                
+                if ~isnan(solutionCell{sIndex})                
+                    for vIndex = 1 : (length(solutionCell{1}) / AnomalyEquationSolver.INDEX_ALL_TYPES)
+                        anomalousFlagArr(vIndex, sIndex)...
+                            = (sum(solutionCell{sIndex}((vIndex-1) * AnomalyEquationSolver.INDEX_ALL_TYPES+1:vIndex * AnomalyEquationSolver.INDEX_ALL_TYPES)) ~= AnomalyEquationSolver.INDEX_ALL_TYPES);                    
+                    end
+                end
+                
+            end
+            
+            anomalousFlagArr = anomalousFlagArr(1:vIndex,:);
+            
+        end
+        
         function tu = computeMinAvoidTime(egoState, otherState)
             
             %tu  = nan;
@@ -446,10 +425,14 @@ classdef RiskAssessment %< matlab.mixin.Copyable
             
             vDims = zeros(SimulationVehicleData.MAX_VEHICLE_COUNT,2);
             
+%             for vIndex = 1 : length(actors)
+%                 actorTemp = actors(vIndex);
+%                 vDims(actorTemp.ActorID,:) = [actorTemp.Length, actorTemp.Width];
+%             end
+            
             for vIndex = 1 : length(actors)
-                actorTemp = actors(vIndex);
-                %vDims(actorTemp.ActorID,:) = [actorTemp.Length, actorTemp.Width];
-                vDims(actorTemp.ActorID,:) = [size(actorTemp, 1), size(actorTemp, 2)];
+                %actorTemp = actors(vIndex);
+                vDims(vIndex+1,:) = [4.7, 1.8];
             end
             
         end
@@ -525,6 +508,89 @@ classdef RiskAssessment %< matlab.mixin.Copyable
             posPredict = tempPos(2:end,:);
             
         end
+
+        function [posPredict, velPredict, headPredict] = predictStatus(posOld, vel1D, acc1D, headingRad, yawRateRad, timeInterval, stepTotalCount)
+            tempPos = zeros(stepTotalCount+1,2);
+            tempPos(1,:) = posOld;
+                    
+            tempVelArr = zeros(stepTotalCount+1,1);
+            tempVelArr(1) = vel1D;
+
+            tempHeadingArr = zeros(stepTotalCount+1,1);
+            tempHeadingArr(1) = headingRad;
+
+            velInc = acc1D * timeInterval;
+                    
+            tempVel = vel1D;            
+            tempHeading = headingRad;
+                    
+            if yawRateRad < 0.001
+                yawRateRad = 0;
+            end
+                    
+            if acc1D < 0.01
+                acc1D = 0;
+            end
+                    
+            if vel1D > 0
+                initVelPositive = true;
+            elseif vel1D < 0
+                initVelPositive = false;
+            else
+                initVelPositive = nan;
+            end
+                    
+            if yawRateRad == 0
+                        
+                dirVecTimesTime = [cos(headingRad) sin(headingRad)] * timeInterval;
+                accDisplacement = dirVecTimesTime * timeInterval * 0.5 * acc1D;
+                        
+                for pIndex = 1 : stepTotalCount
+                            
+                    tempPos(pIndex+1,:) = tempPos(pIndex,:) + dirVecTimesTime * tempVel + accDisplacement;
+                    tempVel = tempVel + velInc;
+                            
+                    if (initVelPositive == true) && (tempVel < 0)                        
+                        tempVel = 0;
+                    elseif (initVelPositive == false) && (tempVel > 0)
+                        tempVel = 0;
+                    end
+                    tempVelArr(pIndex+1) = tempVel;
+                            
+                end
+                        
+            else
+                        
+                accIntervalDivYawRate = acc1D * timeInterval / yawRateRad;
+                accDivYawRateSqaure = acc1D / (yawRateRad ^ 2);
+                headingInc = yawRateRad * timeInterval;
+                        
+                for pIndex = 1 : stepTotalCount
+                    hPrime = tempHeading + headingInc;
+                            
+                    tempPos(pIndex+1,1) = tempPos(pIndex,1)... 
+                        + tempVel / yawRateRad * (sin(hPrime) - sin(tempHeading))... 
+                        + accIntervalDivYawRate * sin(hPrime)... 
+                        - accDivYawRateSqaure * (cos(tempHeading) - cos(hPrime));
+                            
+                    tempPos(pIndex+1,2) = tempPos(pIndex,2)... 
+                        + tempVel / yawRateRad * (cos(tempHeading) - cos(hPrime))... 
+                        - accIntervalDivYawRate * cos(hPrime)... 
+                        - accDivYawRateSqaure * (sin(tempHeading) - sin(hPrime));
+                            
+                    tempVel = tempVel + velInc;
+                    tempHeading = hPrime;
+                    tempVelArr(pIndex+1) = tempVel;
+                    tempHeadingArr(pIndex+1) = tempHeading;
+                end
+            end
+                    
+            posPredict = tempPos(2:end,:);
+            velPredict = tempVelArr(2:end);
+            headPredict = tempHeadingArr(2:end);
+                    
+        end
+
         
     end
 end

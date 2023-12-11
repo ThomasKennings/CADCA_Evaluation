@@ -1,9 +1,9 @@
-clear;
-clc;
 
-for scenarioId = 14% :61
+for scenarioId = 14:20
+    clear;
+    clc;
     helperLFSetUp_Test
     Run_Simulation_CADCA
-    %clc
-    %clear
 end
+
+%plot_simulink_debug;

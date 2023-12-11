@@ -1,4 +1,4 @@
-classdef LocalViewConstructor < matlab.mixin.Copyable
+classdef LocalViewConstructor
     %LOCALVIEWCONSTRUCTOR Summary of this class goes here
     %   Detailed explanation goes here
     
@@ -58,7 +58,7 @@ classdef LocalViewConstructor < matlab.mixin.Copyable
             velOld1D = norm(tempStateRowOld(SimulationVehicleData.TABLE_INDEX_V_X:SimulationVehicleData.TABLE_INDEX_V_Y));
             accOld1D = norm(tempStateRowOld(SimulationVehicleData.TABLE_INDEX_ACC_X:SimulationVehicleData.TABLE_INDEX_ACC_Y));
             headingOldRad = deg2rad(tempStateRowOld(SimulationVehicleData.TABLE_INDEX_H));
-            yawRateOldRad = deg2rad(tempStateRowOld(SimulationVehicleData.TABLE_INDEX_YAW_RATE));
+            yawRateOldRad = deg2rad(tempStateRowOld(SimulationVehicleData.TABLE_INDEX_YAW_RATE));         
             timeInterval = tempStateRow(SimulationVehicleData.TABLE_INDEX_TIMESTAMP) - tempStateRowOld(SimulationVehicleData.TABLE_INDEX_TIMESTAMP);
             stepTotalCount = 1;
             

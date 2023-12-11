@@ -1,23 +1,17 @@
-classdef CADCA %< matlab.mixin.Copyable
+classdef CADCA
     %CADCA Summary of this class goes here
     %   Detailed explanation goes here
     
     properties
-        scenario;
         consistencyChecker;
         riskAssessor;
     end
     
     methods
         
-        function obj = CADCA(scenario)
-            obj.scenario = scenario;
+        function obj = CADCA(actors)
             obj.consistencyChecker = ConsistencyCheck();
-            obj.riskAssessor = RiskAssessment(scenario);
-        end
-        
-        function obj_out = copy(obj)
-            obj_out = CADCA(obj.scenario);
+            obj.riskAssessor = RiskAssessment(actors);
         end
         
         function [result, controlIndex, correctedTable] = performCompleteProcess(obj, stateTable, stateTableOld, controlInputs)
